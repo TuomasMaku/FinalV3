@@ -1558,3 +1558,59 @@ body {
   .score-breakdown { grid-template-columns: repeat(2,1fr); }
   .macro-btn-row { grid-template-columns: repeat(3,1fr); }
 }
+
+
+/* ───── V3 polish fixes ───── */
+html, body { min-height: 100%; background-color: #050607; }
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 18% 10%, rgba(201,255,0,0.06), transparent 24%),
+    radial-gradient(circle at 82% 14%, rgba(0,184,255,0.07), transparent 26%),
+    radial-gradient(circle at 50% 120%, rgba(0,184,255,0.05), transparent 30%);
+  pointer-events: none;
+  z-index: -1;
+  animation: arenaFloat 18s ease-in-out infinite alternate;
+}
+@keyframes arenaFloat {
+  0% { transform: translate3d(0,0,0) scale(1); opacity: .9; }
+  100% { transform: translate3d(0,-18px,0) scale(1.04); opacity: 1; }
+}
+
+.daily-card-premium { overflow: hidden; }
+.daily-card-head { cursor: pointer; user-select: none; -webkit-user-select: none; margin-bottom: 0; align-items: center; }
+.daily-card-title-wrap { display:flex; flex-direction:column; gap:4px; }
+.daily-card-sub { font-size: 11px; }
+.daily-card-head-right { display:flex; align-items:center; gap:10px; }
+.daily-toggle-btn { width: 34px; height: 34px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.05); color: var(--text); font-size: 18px; line-height: 1; }
+.daily-card-body { display:none; padding-top: 14px; }
+.daily-card-premium.open .daily-card-body { display:block; }
+.daily-card-premium.open .daily-toggle-btn { background: rgba(201,255,0,0.14); color: var(--accent); box-shadow: 0 8px 20px rgba(201,255,0,0.12); }
+
+.tab-btn { position: relative; overflow: hidden; padding-top: 10px; }
+.tab-btn::before {
+  top: 8px;
+  left: 18px;
+  right: 18px;
+  height: 3px;
+  border-radius: 999px;
+  z-index: 0;
+}
+.tab-btn > * { position: relative; z-index: 1; }
+.tab-icon { margin-bottom: 6px; }
+
+.ex-row { position: relative; transition: background 0.18s ease, box-shadow 0.22s ease, opacity 0.18s ease; }
+.ex-row.done { background: rgba(120,255,107,0.05); }
+.ex-row.flash-on { animation: exGlowOn .45s ease; }
+.ex-row.flash-off { animation: exGlowOff .45s ease; }
+@keyframes exGlowOn {
+  0% { box-shadow: 0 0 0 rgba(120,255,107,0); background: rgba(120,255,107,0.02); }
+  50% { box-shadow: inset 0 0 0 1px rgba(120,255,107,0.28), 0 0 22px rgba(120,255,107,0.18); background: rgba(120,255,107,0.12); }
+  100% { box-shadow: inset 0 0 0 1px rgba(120,255,107,0.14); background: rgba(120,255,107,0.05); }
+}
+@keyframes exGlowOff {
+  0% { box-shadow: inset 0 0 0 1px rgba(255,48,48,0.18), 0 0 18px rgba(255,48,48,0.14); background: rgba(255,48,48,0.12); }
+  100% { box-shadow: inset 0 0 0 1px rgba(255,48,48,0.08); background: rgba(255,48,48,0.03); }
+}

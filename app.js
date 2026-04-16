@@ -369,6 +369,19 @@ function renderToday() {
   renderWater();
 }
 
+function toggleDailyCard(force) {
+  dailyUiOpen = typeof force === 'boolean' ? force : !dailyUiOpen;
+  S.set('dailyUiOpen', dailyUiOpen);
+  const card = $('dailyCard');
+  const body = $('dailyCardBody');
+  const btn = $('dailyToggleBtn');
+  const sub = $('dailyCardSub');
+  if (card) card.classList.toggle('open', dailyUiOpen);
+  if (body) body.style.display = dailyUiOpen ? 'block' : 'none';
+  if (btn) btn.textContent = dailyUiOpen ? '▴' : '▾';
+  if (sub) sub.textContent = dailyUiOpen ? 'Clique pour refermer' : 'Clique pour ouvrir';
+}
+
 function renderDailyGrid() {
   const el = $('dailyGrid');
   if (!el) return;
@@ -596,6 +609,9 @@ function toggleEx(key) {
   else state.progState[key] = true;
   S.set('progState', state.progState);
   row.classList.toggle('done');
+  row.classList.remove('flash-on', 'flash-off');
+  void row.offsetWidth;
+  row.classList.add(wasDone ? 'flash-off' : 'flash-on');
   /* Update day progress */
   const card = row.closest('.day-card');
   const idx = parseInt(card.dataset.idx);
@@ -1754,6 +1770,8 @@ init();
       setText('sessionProgressText', `${doneExos} / ${totalExos} exos · ${pct}%`);
     }
 
+    toggleDailyCard(dailyUiOpen);
+    toggleDailyCard(dailyUiOpen);
     renderDailyGrid();
     renderProtein();
     renderWater();

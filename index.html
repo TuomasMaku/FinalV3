@@ -84,15 +84,23 @@
     <button class="session-cta" id="sessionStartBtn" onclick="event.stopPropagation(); goTab('train')">Start session</button>
   </div>
 
-  <div class="card card-premium">
-    <div class="card-header card-header-tight">
-      <span class="card-title">🔥 Daily Grind</span>
-      <span class="card-value" id="dailyPct">0%</span>
+  <div class="card card-premium daily-card-premium" id="dailyCard">
+    <div class="card-header card-header-tight daily-card-head" onclick="toggleDailyCard()">
+      <div class="daily-card-title-wrap">
+        <span class="card-title">🔥 Daily Grind</span>
+        <span class="daily-card-sub muted" id="dailyCardSub">Clique pour ouvrir</span>
+      </div>
+      <div class="daily-card-head-right">
+        <span class="card-value" id="dailyPct">0%</span>
+        <button class="daily-toggle-btn" id="dailyToggleBtn" type="button" aria-label="Ouvrir ou fermer Daily Grind">▾</button>
+      </div>
     </div>
-    <div class="daily-grid" id="dailyGrid"></div>
-    <div class="daily-footer-row">
-      <span class="muted">Push les mini objectifs du jour.</span>
-      <button class="mini-action" onclick="resetDailyProgress()">Reset</button>
+    <div class="daily-card-body" id="dailyCardBody">
+      <div class="daily-grid" id="dailyGrid"></div>
+      <div class="daily-footer-row">
+        <span class="muted">Push les mini objectifs du jour.</span>
+        <button class="mini-action" onclick="event.stopPropagation(); resetDailyProgress()">Reset</button>
+      </div>
     </div>
   </div>
 
