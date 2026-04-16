@@ -155,26 +155,6 @@ const DAILY = [
   { id: 4, icon: '🎯', name: 'Gainage', target: 180, step: 30, unit: 'sec' },
 ];
 const DAILY_TOTAL = DAILY.reduce((a, c) => a + c.target, 0);
-const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-const dailyGoalReached = () => state.dailyState.reps.every((r, i) => r >= DAILY[i].target);
-const getTodayScore = () => {
-  const dailyPct = Math.round((state.dailyState.reps.reduce((a, v) => a + v, 0) / DAILY_TOTAL) * 100);
-  const trainPct = (() => {
-    const cur = curDayIdx();
-    if (cur < 0) return 0;
-    const day = DAYS[cur];
-    const totalExos = day.sections.reduce((a, s) => a + s.exercises.length, 0);
-    if (!totalExos) return 0;
-    let doneExos = 0;
-    day.sections.forEach((sec, si) => sec.exercises.forEach((ex, ei) => {
-      if (state.progState[`d${cur}s${si}e${ei}`]) doneExos++;
-    }));
-    return Math.round((doneExos / totalExos) * 100);
-  })();
-  const protPct = Math.round((state.protein.grams / state.proteinTarget) * 100);
-  const waterPct = Math.round((state.water.ml / state.waterTarget) * 100);
-  return clamp(Math.round((dailyPct + trainPct + protPct + waterPct) / 4), 0, 100);
-};
 
 /* ───── RANKS ───── */
 const RANKS = [
@@ -230,29 +210,12 @@ const QUOTES = [
     S.set('prData', oldPr);
     console.log('[migration] prChargesData → prData');
   }
-
-  /* protein blocks → grams */
-  const rawProt = S.get('protein', null);
-  if (rawProt && !('grams' in rawProt)) {
-    const target = S.get('proteinTarget', 150);
-    const blocks = Array.isArray(rawProt.blocks) ? rawProt.blocks.filter(Boolean).length : 0;
-    S.set('protein', { date: rawProt.date || today(), grams: Math.round((target / 4) * blocks) });
-    console.log('[migration] protein blocks → grams');
-  }
+  /* proteinState → protein */
   const oldProt = S.get('proteinState', null);
-  const normalizedProt = S.get('protein', null);
-  if (oldProt && (!normalizedProt || !('grams' in normalizedProt))) {
-    const target = S.get('proteinTarget', 150);
-    const blocks = Array.isArray(oldProt.blocks) ? oldProt.blocks.filter(Boolean).length : 0;
-    S.set('protein', { date: oldProt.date || today(), grams: Math.round((target / 4) * blocks) });
-    console.log('[migration] proteinState → protein grams');
-  }
-
-  /* water count → ml */
-  const rawWater = S.get('water', null);
-  if (rawWater && !('ml' in rawWater)) {
-    S.set('water', { date: rawWater.date || today(), ml: (rawWater.count || 0) * 250 });
-    console.log('[migration] water count → ml');
+  const newProt = S.get('protein', null);
+  if (oldProt && !newProt && oldProt.blocks) {
+    S.set('protein', oldProt);
+    console.log('[migration] proteinState → protein');
   }
 })();
 
@@ -272,23 +235,15 @@ let state = {
   bodyLog:      S.get('bodyLog', []),
   goals:        S.get('goals', []),
   achievements: S.get('achievements', {}),
-  protein:      S.get('protein', { date: '', grams: 0 }),
+  protein:      S.get('protein', { date: '', blocks: [false, false, false, false] }),
   proteinStreak:S.get('proteinStreak', { count: 0, lastDate: '' }),
   proteinTarget: S.get('proteinTarget', 150),
-  water:        S.get('water', { date: '', ml: 0 }),
+  water:        S.get('water', { date: '', count: 0 }),
   waterStreak:  S.get('waterStreak', { count: 0, lastDate: '' }),
-  waterTarget:  S.get('waterTarget', 2500),
+  waterTarget:   S.get('waterTarget', 2500),
 };
 
 /* Reset daily state if new day */
-if (!Array.isArray(state.dailyState.reps)) {
-  state.dailyState = { date: today(), reps: DAILY.map(() => 0) };
-}
-if (state.dailyState.reps.length !== DAILY.length) {
-  const padded = Array.from({ length: DAILY.length }, (_, i) => state.dailyState.reps[i] || 0);
-  state.dailyState = { ...state.dailyState, reps: padded };
-  S.set('dailyState', state.dailyState);
-}
 if (state.dailyState.date !== today()) {
   // Archive previous day to history before reset
   if (state.dailyState.date && state.dailyState.reps.some(v => v > 0)) {
@@ -308,19 +263,11 @@ if (state.dailyState.date !== today()) {
   S.set('dailyState', state.dailyState);
 }
 if (state.protein.date !== today()) {
-  state.protein = { date: today(), grams: 0 };
-  S.set('protein', state.protein);
-}
-if (typeof state.protein.grams !== 'number') {
-  state.protein.grams = 0;
+  state.protein = { date: today(), blocks: [false, false, false, false] };
   S.set('protein', state.protein);
 }
 if (state.water.date !== today()) {
-  state.water = { date: today(), ml: 0 };
-  S.set('water', state.water);
-}
-if (typeof state.water.ml !== 'number') {
-  state.water.ml = 0;
+  state.water = { date: today(), count: 0 };
   S.set('water', state.water);
 }
 
@@ -420,12 +367,6 @@ function renderToday() {
   /* Protein & water */
   renderProtein();
   renderWater();
-
-  const score = getTodayScore();
-  setText('scorePct', score + '%');
-  setText('scoreLabel', score >= 90 ? 'élite' : score >= 75 ? 'solide' : score >= 50 ? 'en cours' : 'à lancer');
-  const scoreBar = $('scoreBar');
-  if (scoreBar) scoreBar.style.width = clamp(score, 0, 100) + '%';
 }
 
 function renderDailyGrid() {
@@ -473,17 +414,7 @@ function dailyStep(i, sign) {
 
   if (navigator.vibrate) navigator.vibrate(sign > 0 ? 40 : 20);
   renderDailyGrid();
-  renderToday();
   checkAchievements();
-}
-
-function resetDaily() {
-  state.dailyState = { date: today(), reps: DAILY.map(() => 0) };
-  S.set('dailyState', state.dailyState);
-  state.historyData = state.historyData.filter(d => d.date !== today());
-  S.set('historyData', state.historyData);
-  toast('🧹', 'Daily reset', 'Tu repars clean pour aujourd\'hui');
-  renderToday();
 }
 
 function archiveDaily() {
@@ -509,76 +440,63 @@ const PROT_SLOTS = [
 ];
 
 function renderProtein() {
-  const quick = $('protQuick');
-  if (!quick) return;
-  const pct = clamp(Math.round((state.protein.grams / state.proteinTarget) * 100), 0, 100);
-  setText('protG', Math.round(state.protein.grams));
-  setText('protTargetDisplay', state.proteinTarget + 'g');
-  setText('protHint', `${Math.max(0, Math.round(state.proteinTarget - state.protein.grams))}g restant`);
-  const bar = $('protBar');
-  if (bar) bar.style.width = pct + '%';
-  quick.innerHTML = [10,20,30,50].map(v => `
-    <button class="macro-chip" onclick="addProtein(${v})">+${v}g</button>`).join('') +
-    `<button class="macro-chip ghost" onclick="resetProtein()">reset</button>`;
+  const el = $('protBlocks');
+  if (!el) return;
+  const perSlot = state.proteinTarget / 4;
+  const doneG = state.protein.blocks.filter(Boolean).length * perSlot;
+  setText('protG', Math.round(doneG));
+  el.innerHTML = PROT_SLOTS.map((s, i) => `
+    <div class="prot-slot ${state.protein.blocks[i] ? 'done' : ''}" onclick="toggleProt(${i})">
+      <div class="prot-icon">${s.icon}</div>
+      <div class="prot-label">${s.label}</div>
+      <div class="prot-g">+${Math.round(perSlot)}g</div>
+    </div>`).join('');
 }
 
-function addProtein(g) {
-  state.protein.grams = clamp(Math.round((state.protein.grams + g) * 10) / 10, 0, 500);
+function toggleProt(i) {
+  state.protein.blocks[i] = !state.protein.blocks[i];
   S.set('protein', state.protein);
-  if (state.protein.grams >= state.proteinTarget && state.proteinStreak.lastDate !== today()) {
-    state.proteinStreak.count = state.proteinStreak.lastDate === yesterday() ? state.proteinStreak.count + 1 : 1;
-    state.proteinStreak.lastDate = today();
-    S.set('proteinStreak', state.proteinStreak);
-    toast('🥩', 'Objectif prot atteint', `${Math.round(state.protein.grams)}g aujourd'hui`);
+  /* Streak */
+  if (state.protein.blocks.every(Boolean)) {
+    if (state.proteinStreak.lastDate !== today()) {
+      state.proteinStreak.count = state.proteinStreak.lastDate === yesterday() ? state.proteinStreak.count + 1 : 1;
+      state.proteinStreak.lastDate = today();
+      S.set('proteinStreak', state.proteinStreak);
+    }
   }
-  if (navigator.vibrate) navigator.vibrate(20);
+  if (navigator.vibrate) navigator.vibrate(30);
   renderProtein();
-  renderToday();
   checkAchievements();
-}
-
-function resetProtein() {
-  state.protein.grams = 0;
-  S.set('protein', state.protein);
-  renderProtein();
-  renderToday();
 }
 
 /* ───── WATER ───── */
 function renderWater() {
-  const quick = $('waterQuick');
-  if (!quick) return;
-  const pct = clamp(Math.round((state.water.ml / state.waterTarget) * 100), 0, 100);
-  setText('waterCount', (state.water.ml / 1000).toFixed(state.water.ml % 1000 === 0 ? 0 : 1));
-  setText('waterTargetDisplay', (state.waterTarget / 1000).toFixed(state.waterTarget % 1000 === 0 ? 0 : 1) + 'L');
-  setText('waterHint', `${Math.max(0, state.waterTarget - state.water.ml)}ml restant`);
-  const bar = $('waterBar');
-  if (bar) bar.style.width = pct + '%';
-  quick.innerHTML = [250,500,750,1000].map(v => `
-    <button class="macro-chip water" onclick="addWater(${v})">+${v >= 1000 ? (v/1000)+'L' : v+'ml'}</button>`).join('') +
-    `<button class="macro-chip ghost" onclick="resetWater()">reset</button>`;
+  const el = $('waterBlocks');
+  if (!el) return;
+  setText('waterCount', state.water.count);
+  el.innerHTML = Array.from({ length: 8 }, (_, i) => `
+    <div class="water-glass ${i < state.water.count ? 'filled' : ''}" onclick="toggleWater(${i})"></div>`).join('');
 }
 
-function addWater(ml) {
-  state.water.ml = clamp(state.water.ml + ml, 0, 10000);
+function toggleWater(i) {
+  /* Tap on glass i: if filled => reduce to i, else fill to i+1 */
+  if (i < state.water.count) {
+    state.water.count = i;
+  } else {
+    state.water.count = i + 1;
+  }
   S.set('water', state.water);
-  if (state.water.ml >= state.waterTarget && state.waterStreak.lastDate !== today()) {
-    state.waterStreak.count = state.waterStreak.lastDate === yesterday() ? state.waterStreak.count + 1 : 1;
-    state.waterStreak.lastDate = today();
-    S.set('waterStreak', state.waterStreak);
-    toast('💧', 'Hydratation validée', `${(state.water.ml / 1000).toFixed(1)}L aujourd'hui`);
+  /* Streak */
+  if (state.water.count >= 8) {
+    if (state.waterStreak.lastDate !== today()) {
+      state.waterStreak.count = state.waterStreak.lastDate === yesterday() ? state.waterStreak.count + 1 : 1;
+      state.waterStreak.lastDate = today();
+      S.set('waterStreak', state.waterStreak);
+    }
   }
   if (navigator.vibrate) navigator.vibrate(20);
   renderWater();
-  renderToday();
   checkAchievements();
-}
-
-function resetWater() {
-  state.water.ml = 0;
-  S.set('water', state.water);
-  renderWater();
-  renderToday();
 }
 
 /* ───── TRAIN TAB ───── */
@@ -1151,7 +1069,6 @@ function renderBody() {
 
   /* Goals */
   renderGoals();
-  renderFocusCard();
 
   /* Achievements */
   renderAchGrid();
@@ -1186,27 +1103,6 @@ function renderWeightChart() {
     <text x="${pts[pts.length-1].x}" y="${pts[pts.length-1].y - 8}" text-anchor="middle" fill="${color}" font-size="11" font-family="Bebas Neue">${last.kg}kg</text>`;
 }
 
-function renderFocusCard() {
-  const el = $('focusGoal');
-  if (!el) return;
-  syncGoalsWithData();
-  const active = [...state.goals]
-    .filter(g => g.target > 0 && ((g.type === 'run5k' && g.current > g.target) || (g.type !== 'run5k' && g.current < g.target)))
-    .sort((a, b) => ((a.target - a.current) / a.target) - ((b.target - b.current) / b.target))[0];
-  if (!active) {
-    el.innerHTML = '<div class="focus-empty">Aucun objectif chaud. Crée-en un ou termine ton cycle.</div>';
-    return;
-  }
-  const reverse = active.type === 'run5k';
-  const pct = clamp(Math.round(reverse ? (active.target / Math.max(active.current || active.target, 0.1)) * 100 : (active.current / active.target) * 100), 0, 100);
-  el.innerHTML = `<div class="focus-card-inner">
-    <div class="focus-top"><span>Focus actuel</span><span>${pct}%</span></div>
-    <div class="focus-title">${active.icon} ${active.name}</div>
-    <div class="goal-bar"><div class="goal-bar-fill" style="width:${pct}%"></div></div>
-    <div class="focus-meta">${active.current}${active.unit} / ${active.target}${active.unit}</div>
-  </div>`;
-}
-
 /* GOALS */
 const GOAL_TPL = [
   { type: 'bench', name: 'Bench Press', unit: 'kg', icon: '🏋️' },
@@ -1227,16 +1123,13 @@ function renderGoals() {
     return;
   }
   el.innerHTML = state.goals.map(g => {
-    const reverse = g.type === 'run5k';
-    const pctRaw = reverse ? ((g.target / Math.max(g.current || g.target, 0.1)) * 100) : ((g.current / g.target) * 100);
-    const pct = clamp(Math.round(pctRaw), 0, 100);
-    const done = reverse ? (g.current <= g.target && g.current > 0) : g.current >= g.target;
+    const pct = Math.min(100, Math.round((g.current / g.target) * 100));
+    const done = g.current >= g.target;
     const daysLeft = g.deadline ? daysBetween(today(), g.deadline) : null;
     const deadlineStr = daysLeft !== null
       ? (daysLeft > 0 ? `${daysLeft}j restants` : daysLeft === 0 ? 'Aujourd\'hui !' : `Dépassé de ${-daysLeft}j`)
       : '';
     const urgent = daysLeft !== null && daysLeft < 14 && !done;
-    const remain = reverse ? `${Math.max(0, (g.current - g.target)).toFixed(1)}${g.unit} à gratter` : `${(g.target - g.current).toFixed(1)}${g.unit} restant`;
     return `<div class="goal-card ${done ? 'done' : ''}">
       <div class="goal-head">
         <div class="goal-icon">${g.icon}</div>
@@ -1245,13 +1138,12 @@ function renderGoals() {
           ${deadlineStr ? `<div class="goal-deadline ${urgent ? 'urgent' : ''}">${deadlineStr}</div>` : ''}
         </div>
         <div class="goal-vals">${g.current}<span class="muted">/${g.target}${g.unit}</span></div>
-        <button class="goal-edit" onclick="editGoal('${g.id}')">✎</button>
         <button class="goal-del" onclick="deleteGoal('${g.id}')">✕</button>
       </div>
       <div class="goal-bar"><div class="goal-bar-fill" style="width:${pct}%"></div></div>
       <div class="goal-foot">
         <span class="goal-pct">${pct}%</span>
-        <span>${done ? '✓ Atteint 🎉' : remain}</span>
+        <span>${done ? '✓ Atteint 🎉' : `${(g.target - g.current).toFixed(1)}${g.unit} restant`}</span>
       </div>
     </div>`;
   }).join('');
@@ -1264,10 +1156,6 @@ function syncGoalsWithData() {
     if (g.type === 'squat' && state.prData['Squat barre']) v = state.prData['Squat barre'].kg;
     if (g.type === 'weight' && state.bodyLog.length) v = state.bodyLog[0].kg;
     if (g.type === 'streak') v = state.streakData.count;
-    if (g.type === 'run5k') {
-      const best5k = state.runHistory.filter(r => Math.abs(r.dist - 5) <= 0.15).sort((a, b) => a.timeSec - b.timeSec)[0];
-      if (best5k) v = +(best5k.timeSec / 60).toFixed(1);
-    }
     if (v !== null) g.current = v;
   });
   S.set('goals', state.goals);
@@ -1324,27 +1212,12 @@ function saveGoal() {
   closeModal('goalModal');
   toast('🎯', 'Objectif créé', name);
   renderGoals();
-  renderFocusCard();
-}
-
-function editGoal(id) {
-  const g = state.goals.find(x => x.id === id);
-  if (!g) return;
-  const val = prompt(`Mettre à jour ${g.name} (${g.unit || 'valeur'})`, g.current);
-  if (val === null) return;
-  const parsed = parseFloat(val);
-  if (Number.isNaN(parsed)) return;
-  g.current = parsed;
-  S.set('goals', state.goals);
-  renderGoals();
-  renderFocusCard();
 }
 
 function deleteGoal(id) {
   state.goals = state.goals.filter(g => g.id !== id);
   S.set('goals', state.goals);
   renderGoals();
-  renderFocusCard();
 }
 
 /* ACHIEVEMENTS */
@@ -1540,7 +1413,6 @@ function confirmAction(title, msg, onConfirm) {
 function openSettings() {
   $('hardcoreToggle').classList.toggle('on', state.hardcoreMode);
   $('proteinTarget').value = state.proteinTarget;
-  $('waterTarget').value = state.waterTarget;
   showModal('settingsModal');
 }
 
@@ -1552,30 +1424,13 @@ function toggleHardcore() {
     state.hardcoreMode ? 'Zéro pitié sur les skips.' : 'Mode flexible activé.');
 }
 
-function saveTargets() {
-  const prot = parseFloat($('proteinTarget').value);
-  const water = parseFloat($('waterTarget').value);
-  if (!prot || prot < 50 || prot > 400) { toast('⚠️', 'Prot invalide', 'Entre 50 et 400g'); return; }
-  if (!water || water < 1000 || water > 8000) { toast('⚠️', 'Hydratation invalide', 'Entre 1000 et 8000ml'); return; }
-  state.proteinTarget = prot;
-  state.waterTarget = water;
-  S.set('proteinTarget', prot);
-  S.set('waterTarget', water);
-  toast('⚙️', 'Objectifs mis à jour', `${prot}g · ${(water/1000).toFixed(1)}L`);
+function saveProteinTarget() {
+  const v = parseFloat($('proteinTarget').value);
+  if (!v || v < 50 || v > 400) { toast('⚠️', 'Valeur invalide', 'Entre 50 et 400g'); return; }
+  state.proteinTarget = v;
+  S.set('proteinTarget', v);
+  toast('🥩', 'Objectif enregistré', v + 'g/jour');
   renderProtein();
-  renderWater();
-  renderToday();
-}
-
-function autofillWaterTarget() {
-  const kg = state.bodyLog[0]?.kg;
-  if (!kg) {
-    toast('⚠️', 'Pas de poids récent', 'Log une pesée pour auto-calculer');
-    return;
-  }
-  const target = Math.round((kg * 35) / 50) * 50;
-  $('waterTarget').value = target;
-  toast('💧', 'Hydratation suggérée', `${target}ml basé sur ${kg}kg`);
 }
 
 /* ───── BACKUP / RESTORE ───── */
@@ -1680,3 +1535,259 @@ function init() {
 }
 
 init();
+
+
+/* ───── PREMIUM V2 OVERRIDES ───── */
+(function premiumUpgrade(){
+  // migrations
+  if (!state.dailyState.reps || state.dailyState.reps.length !== DAILY.length) {
+    state.dailyState = { date: today(), reps: DAILY.map(() => 0) };
+    S.set('dailyState', state.dailyState);
+  }
+
+  if (!state.protein || typeof state.protein !== 'object') state.protein = { date: today(), grams: 0 };
+  if (Array.isArray(state.protein.blocks)) {
+    const legacy = Math.round(state.protein.blocks.filter(Boolean).length * (state.proteinTarget / 4));
+    state.protein = { date: state.protein.date || today(), grams: legacy };
+    S.set('protein', state.protein);
+  }
+  if (typeof state.protein.grams !== 'number') {
+    state.protein = { date: state.protein.date || today(), grams: 0 };
+    S.set('protein', state.protein);
+  }
+  if (state.protein.date !== today()) {
+    state.protein = { date: today(), grams: 0 };
+    S.set('protein', state.protein);
+  }
+
+  if (!state.water || typeof state.water !== 'object') state.water = { date: today(), ml: 0 };
+  if (typeof state.water.count === 'number' && typeof state.water.ml !== 'number') {
+    state.water = { date: state.water.date || today(), ml: state.water.count * 250 };
+    S.set('water', state.water);
+  }
+  if (typeof state.water.ml !== 'number') {
+    state.water = { date: state.water.date || today(), ml: 0 };
+    S.set('water', state.water);
+  }
+  if (state.water.date !== today()) {
+    state.water = { date: today(), ml: 0 };
+    S.set('water', state.water);
+  }
+
+  if (!state.waterTarget || state.waterTarget < 1000) {
+    const lastWeight = (state.bodyLog && state.bodyLog[0] && state.bodyLog[0].kg) ? state.bodyLog[0].kg : 70;
+    state.waterTarget = Math.round(lastWeight * 35 / 250) * 250;
+    S.set('waterTarget', state.waterTarget);
+  }
+
+  function latestWeight() {
+    return (state.bodyLog && state.bodyLog[0] && state.bodyLog[0].kg) ? state.bodyLog[0].kg : 70;
+  }
+
+  function calcLevelData() {
+    const perfectDays = state.historyData.filter(d => d.done).length;
+    const score = getTodayScore();
+    const xp = perfectDays * 100 + (state.streakData.best || 0) * 40 + score * 6 + state.runHistory.length * 20;
+    const level = Math.max(1, Math.floor(xp / 250) + 1);
+    const curBase = (level - 1) * 250;
+    const curXp = xp - curBase;
+    return { xp, level, curXp, nextXp: 250 };
+  }
+
+  function getProteinPct() { return Math.min(100, Math.round((state.protein.grams / state.proteinTarget) * 100)); }
+  function getWaterPct() { return Math.min(100, Math.round((state.water.ml / state.waterTarget) * 100)); }
+  function getDailyPct() {
+    const total = state.dailyState.reps.reduce((a, v) => a + v, 0);
+    return Math.round(total / DAILY_TOTAL * 100);
+  }
+  function getSessionPct() {
+    const cur = curDayIdx();
+    if (cur < 0) return 0;
+    const day = DAYS[cur];
+    const totalExos = day.sections.reduce((a, s) => a + s.exercises.length, 0);
+    let doneExos = 0;
+    day.sections.forEach((sec, si) => sec.exercises.forEach((ex, ei) => { if (state.progState[`d${cur}s${si}e${ei}`]) doneExos++; }));
+    return totalExos ? Math.round((doneExos / totalExos) * 100) : 0;
+  }
+  function getTodayScore() {
+    return Math.round(getSessionPct() * 0.30 + getDailyPct() * 0.30 + getProteinPct() * 0.20 + getWaterPct() * 0.20);
+  }
+
+  window.addProtein = function(amount){
+    state.protein.grams = Math.max(0, state.protein.grams + amount);
+    S.set('protein', state.protein);
+    if (state.protein.grams >= state.proteinTarget && state.proteinStreak.lastDate !== today()) {
+      state.proteinStreak.count = state.proteinStreak.lastDate === yesterday() ? state.proteinStreak.count + 1 : 1;
+      state.proteinStreak.lastDate = today();
+      S.set('proteinStreak', state.proteinStreak);
+    }
+    renderToday();
+    checkAchievements();
+  }
+  window.resetProtein = function(){
+    state.protein.grams = 0; S.set('protein', state.protein); renderToday();
+  }
+  window.addWater = function(amount){
+    state.water.ml = Math.max(0, state.water.ml + amount);
+    S.set('water', state.water);
+    if (state.water.ml >= state.waterTarget && state.waterStreak.lastDate !== today()) {
+      state.waterStreak.count = state.waterStreak.lastDate === yesterday() ? state.waterStreak.count + 1 : 1;
+      state.waterStreak.lastDate = today();
+      S.set('waterStreak', state.waterStreak);
+    }
+    renderToday();
+    checkAchievements();
+  }
+  window.resetWater = function(){ state.water.ml = 0; S.set('water', state.water); renderToday(); }
+  window.resetDailyProgress = function(){
+    state.dailyState.reps = DAILY.map(() => 0);
+    S.set('dailyState', state.dailyState);
+    archiveDaily();
+    renderToday();
+  }
+
+  renderProtein = function() {
+    const el = $('protBlocks');
+    if (!el) return;
+    const pct = getProteinPct();
+    setText('protG', Math.round(state.protein.grams));
+    setText('protTargetLabel', Math.round(state.proteinTarget));
+    setText('protPct', pct + '%');
+    setText('protStatus', pct >= 100 ? 'Objectif verrouillé' : pct >= 70 ? 'Bien parti' : 'Il faut nourrir la machine');
+    const bar = $('protBar'); if (bar) bar.style.width = pct + '%';
+    el.innerHTML = `
+      <button class="macro-btn" onclick="addProtein(10)">+10g</button>
+      <button class="macro-btn" onclick="addProtein(20)">+20g</button>
+      <button class="macro-btn" onclick="addProtein(30)">+30g</button>
+      <button class="macro-btn" onclick="addProtein(50)">+50g</button>
+      <button class="macro-btn ghost" onclick="resetProtein()">Reset</button>`;
+  }
+
+  renderWater = function() {
+    const el = $('waterBlocks');
+    if (!el) return;
+    const pct = getWaterPct();
+    setText('waterCount', Math.round(state.water.ml));
+    setText('waterTargetLabel', Math.round(state.waterTarget));
+    setText('waterPct', pct + '%');
+    setText('waterStatus', pct >= 100 ? 'Hydratation validée' : pct >= 70 ? 'Encore un peu' : 'Monte le volume d’eau');
+    const bar = $('waterBar'); if (bar) bar.style.width = pct + '%';
+    el.innerHTML = `
+      <button class="macro-btn water" onclick="addWater(250)">+250</button>
+      <button class="macro-btn water" onclick="addWater(500)">+500</button>
+      <button class="macro-btn water" onclick="addWater(750)">+750</button>
+      <button class="macro-btn water" onclick="addWater(1000)">+1L</button>
+      <button class="macro-btn ghost" onclick="resetWater()">Reset</button>`;
+  }
+
+  renderToday = function() {
+    const now = new Date();
+    const h = now.getHours();
+    const greet = h < 12 ? 'Bonjour' : h < 18 ? 'Bon après-midi' : 'Bonsoir';
+    setHTML('greeting', `${greet}<span class="accent"> Thomas.</span>`);
+    setText('todayDate', `${JOURS[now.getDay()]} ${now.getDate()} ${MOIS[now.getMonth()]}`);
+    setText('quote', QUOTES[now.getDate() % QUOTES.length]);
+
+    const rank = getRank(state.streakData.count);
+    const next = RANKS[RANKS.indexOf(rank) + 1];
+    setText('rankName', rank.name);
+    const rankBar = $('rankBar');
+    if (rankBar) {
+      const prog = next ? Math.round(((state.streakData.count - rank.min) / (next.min - rank.min)) * 100) : 100;
+      rankBar.style.width = Math.min(100, Math.max(0, prog)) + '%';
+      rankBar.style.background = rank.color;
+    }
+    setText('streakNum', state.streakData.count);
+    setText('streakSub', state.streakData.count === 0 ? "Commence aujourd'hui" : `${state.streakData.count} jours d'affilée`);
+
+    const xpData = calcLevelData();
+    setText('xpLevel', xpData.level);
+    setText('xpMeta', `${xpData.curXp} / ${xpData.nextXp} XP`);
+
+    const score = getTodayScore();
+    setText('dailyScoreVal', score + '%');
+    const ring = $('dailyScoreRing');
+    if (ring) ring.style.setProperty('--score', score + '%');
+    setText('scoreSummary', score >= 85 ? 'Grosse journée. T’es verrouillé.' : score >= 60 ? 'Bonne cadence. Termine les détails.' : 'Pose les fondations avant de vouloir forcer.');
+    const bd = $('scoreBreakdown');
+    if (bd) bd.innerHTML = `
+      <div class="score-chip"><span>Train</span><strong>${getSessionPct()}%</strong></div>
+      <div class="score-chip"><span>Daily</span><strong>${getDailyPct()}%</strong></div>
+      <div class="score-chip"><span>Prot</span><strong>${getProteinPct()}%</strong></div>
+      <div class="score-chip"><span>Eau</span><strong>${getWaterPct()}%</strong></div>`;
+
+    const priorities = [
+      { key: 'Train', pct: getSessionPct() },
+      { key: 'Protein', pct: getProteinPct() },
+      { key: 'Hydrate', pct: getWaterPct() },
+      { key: 'Daily', pct: getDailyPct() },
+    ].sort((a,b)=>a.pct-b.pct);
+    setText('focusTitle', priorities[0].pct >= 100 ? 'Tout est clean' : `Priorité : ${priorities[0].key}`);
+    setText('focusText', priorities[0].pct >= 100 ? 'Journée verrouillée. Tu peux juste maintenir.' : `${priorities[0].key} est le point faible du jour. Ferme cette boucle et ton score grimpe vite.`);
+    setText('focusPill1', priorities[0].key);
+    setText('focusPill2', priorities[1].key);
+    setText('focusPill3', priorities[2].key);
+
+    const cur = curDayIdx();
+    const sc = $('sessionCard');
+    if (cur < 0) {
+      setText('sessionTag', '—');
+      setText('sessionDay', '—');
+      setText('sessionTitle', 'Aucun cycle en cours');
+      setText('sessionMeta', 'Lance le programme pour débloquer le mode machine');
+      if (sc) sc.style.borderLeftColor = 'var(--muted-2)';
+      $('sessionProgressBar').style.width = '0%';
+      setText('sessionProgressText', '0 / 0 exos');
+    } else {
+      const day = DAYS[cur];
+      const tagEl = $('sessionTag');
+      if (tagEl) { tagEl.textContent = day.type.toUpperCase(); tagEl.className = 'session-tag ' + day.type; }
+      setText('sessionDay', `J${day.num}/8`);
+      setText('sessionTitle', day.title);
+      setText('sessionMeta', `${day.duration} · ${day.intensity}`);
+      if (sc) sc.style.borderLeftColor = `var(--${day.type})`;
+      const totalExos = day.sections.reduce((a, s) => a + s.exercises.length, 0);
+      let doneExos = 0;
+      day.sections.forEach((sec, si) => sec.exercises.forEach((ex, ei) => { if (state.progState[`d${cur}s${si}e${ei}`]) doneExos++; }));
+      const pct = Math.round(doneExos / totalExos * 100);
+      $('sessionProgressBar').style.width = pct + '%';
+      setText('sessionProgressText', `${doneExos} / ${totalExos} exos · ${pct}%`);
+    }
+
+    renderDailyGrid();
+    renderProtein();
+    renderWater();
+  }
+
+  openSettings = function() {
+    $('hardcoreToggle').classList.toggle('on', state.hardcoreMode);
+    $('proteinTarget').value = state.proteinTarget;
+    if ($('waterTarget')) $('waterTarget').value = state.waterTarget;
+    showModal('settingsModal');
+  }
+
+  saveProteinTarget = function() {
+    const v = parseFloat($('proteinTarget').value);
+    if (!v || v < 50 || v > 400) { toast('⚠️', 'Valeur invalide', 'Entre 50 et 400g'); return; }
+    state.proteinTarget = v;
+    S.set('proteinTarget', v);
+    renderToday();
+    toast('🥩', 'Objectif enregistré', v + 'g/jour');
+  }
+
+  window.saveWaterTarget = function() {
+    const field = $('waterTarget');
+    let v = field ? parseFloat(field.value) : 0;
+    if (!v || v < 1000 || v > 6000) {
+      v = Math.round(latestWeight() * 35 / 250) * 250;
+    }
+    state.waterTarget = v;
+    S.set('waterTarget', v);
+    if (field) field.value = v;
+    renderToday();
+    toast('💧', 'Hydratation calibrée', v + 'ml/jour');
+  }
+
+  // rerender premium immediately after legacy init
+  renderToday();
+})();

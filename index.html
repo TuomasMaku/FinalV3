@@ -16,33 +16,61 @@
 <!-- ══════════════════ TODAY ══════════════════ -->
 <section class="tab active" id="tab-today">
 
-  <header class="hero">
+  <header class="hero hero-premium">
     <div class="hero-brand">ARENA<span class="hero-dot">·</span><span id="todayDate">—</span></div>
-    <h1 class="hero-title" id="greeting">Salut</h1>
-    <p class="hero-quote" id="quote">Discipline > motivation</p>
+    <div class="hero-topline">
+      <div>
+        <h1 class="hero-title" id="greeting">Salut</h1>
+        <p class="hero-quote" id="quote">Discipline > motivation</p>
+      </div>
+      <div class="hero-orb">
+        <div class="hero-orb-ring"></div>
+        <div class="hero-orb-core">
+          <span class="hero-orb-kicker">Level</span>
+          <span class="hero-orb-value" id="xpLevel">1</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="xp-card premium-panel">
+      <div class="xp-head">
+        <div>
+          <div class="mini-label">Progression</div>
+          <div class="xp-title"><span id="rankName">Rookie</span> <span class="muted">· XP system</span></div>
+        </div>
+        <div class="xp-side"><span id="streakNum">0</span><span class="muted">j streak</span></div>
+      </div>
+      <div class="xp-bar-wrap"><div class="xp-bar" id="rankBar"></div></div>
+      <div class="xp-meta"><span id="xpMeta">0 / 100 XP</span><span id="streakSub">Commence aujourd'hui</span></div>
+    </div>
   </header>
 
-  <!-- Status strip -->
-  <div class="status-strip">
-    <div class="status-cell" onclick="showRankInfo()">
-      <div class="status-label">Rang</div>
-      <div class="status-val" id="rankName">Rookie</div>
-      <div class="status-bar"><div class="status-bar-fill" id="rankBar"></div></div>
+  <div class="today-grid-premium">
+    <div class="premium-panel score-panel">
+      <div class="score-ring-wrap">
+        <div class="score-ring" id="dailyScoreRing"><span id="dailyScoreVal">0%</span></div>
+      </div>
+      <div class="score-copy">
+        <div class="mini-label">Daily score</div>
+        <div class="score-title">Ton pilotage du jour</div>
+        <p class="score-text" id="scoreSummary">Commence par cocher tes bases.</p>
+      </div>
+      <div class="score-breakdown" id="scoreBreakdown"></div>
     </div>
-    <div class="status-cell">
-      <div class="status-label">Streak</div>
-      <div class="status-val accent" id="streakNum">0</div>
-      <div class="status-sub" id="streakSub">0 jours</div>
-    </div>
-    <div class="status-cell">
-      <div class="status-label">Discipline</div>
-      <div class="status-val" id="discScore">—</div>
-      <div class="status-sub">30 derniers j.</div>
+
+    <div class="premium-panel focus-panel">
+      <div class="mini-label">Focus du jour</div>
+      <div class="focus-title" id="focusTitle">Verrouille tes bases</div>
+      <p class="focus-text" id="focusText">Protéines, eau et séance. Pas de trou dans la raquette.</p>
+      <div class="focus-pills">
+        <span class="focus-pill" id="focusPill1">Train</span>
+        <span class="focus-pill" id="focusPill2">Protein</span>
+        <span class="focus-pill" id="focusPill3">Hydrate</span>
+      </div>
     </div>
   </div>
 
-  <!-- Today's session — the hero card -->
-  <div class="card session-card" id="sessionCard" onclick="goTab('train')">
+  <div class="card session-card session-card-premium" id="sessionCard" onclick="goTab('train')">
     <div class="session-top">
       <span class="session-tag" id="sessionTag">—</span>
       <span class="session-day" id="sessionDay">—</span>
@@ -53,53 +81,50 @@
       <div class="session-progress-bar" id="sessionProgressBar"></div>
     </div>
     <div class="session-progress-text" id="sessionProgressText">0 / 0 exos</div>
+    <button class="session-cta" id="sessionStartBtn" onclick="event.stopPropagation(); goTab('train')">Start session</button>
   </div>
 
-  <!-- Daily challenge -->
-  <div class="card">
-    <div class="card-header">
+  <div class="card card-premium">
+    <div class="card-header card-header-tight">
       <span class="card-title">🔥 Daily Grind</span>
-      <div class="card-actions-inline">
-        <span class="card-value" id="dailyPct">0%</span>
-        <button class="mini-action" onclick="resetDaily()">reset</button>
-      </div>
+      <span class="card-value" id="dailyPct">0%</span>
     </div>
     <div class="daily-grid" id="dailyGrid"></div>
+    <div class="daily-footer-row">
+      <span class="muted">Push les mini objectifs du jour.</span>
+      <button class="mini-action" onclick="resetDailyProgress()">Reset</button>
+    </div>
   </div>
 
-  <div class="card score-card">
-    <div class="card-header">
-      <span class="card-title">🎯 Score du jour</span>
-      <span class="card-value" id="scorePct">0%</span>
+  <div class="nutrition-grid">
+    <div class="card card-premium nutrition-card protein-card">
+      <div class="card-header card-header-tight">
+        <span class="card-title">🥩 Protéines</span>
+        <span class="card-value"><span id="protG">0</span><span class="muted">/<span id="protTargetLabel">150</span>g</span></span>
+      </div>
+      <div class="macro-progress"><div class="macro-progress-bar protein" id="protBar"></div></div>
+      <div class="macro-subline"><span id="protStatus">Objectif à lancer</span><span class="muted" id="protPct">0%</span></div>
+      <div class="macro-btn-row" id="protBlocks"></div>
     </div>
-    <div class="macro-progress"><div class="macro-progress-fill" id="scoreBar"></div></div>
-    <div class="macro-hint" id="scoreLabel">à lancer</div>
+
+    <div class="card card-premium nutrition-card water-card">
+      <div class="card-header card-header-tight">
+        <span class="card-title">💧 Hydratation</span>
+        <span class="card-value"><span id="waterCount">0</span><span class="muted">/<span id="waterTargetLabel">2500</span>ml</span></span>
+      </div>
+      <div class="macro-progress"><div class="macro-progress-bar water" id="waterBar"></div></div>
+      <div class="macro-subline"><span id="waterStatus">Monte progressivement</span><span class="muted" id="waterPct">0%</span></div>
+      <div class="macro-btn-row macro-btn-row-water" id="waterBlocks"></div>
+    </div>
   </div>
 
-  <!-- Nutrition -->
-  <div class="card">
-    <div class="card-header">
-      <span class="card-title">🥩 Protéines</span>
-      <span class="card-value"><span id="protG">0</span><span class="muted">/<span id="protTargetDisplay">150g</span></span></span>
-    </div>
-    <div class="macro-progress"><div class="macro-progress-fill" id="protBar"></div></div>
-    <div class="macro-hint" id="protHint">0g restant</div>
-    <div class="macro-quick" id="protQuick"></div>
-
-    <div class="card-header" style="margin-top:20px">
-      <span class="card-title">💧 Hydratation</span>
-      <span class="card-value"><span id="waterCount">0</span><span class="muted">/<span id="waterTargetDisplay">2.5L</span></span></span>
-    </div>
-    <div class="macro-progress water"><div class="macro-progress-fill water" id="waterBar"></div></div>
-    <div class="macro-hint" id="waterHint">0ml restant</div>
-    <div class="macro-quick" id="waterQuick"></div>
-  </div>
-
-  <!-- Quick actions -->
-  <div class="quick-actions">
-    <button class="qa" onclick="openQuickLog('run')"><span class="qa-icon">🏃</span><span>Log run</span></button>
-    <button class="qa" onclick="openQuickLog('weight')"><span class="qa-icon">⚖️</span><span>Peser</span></button>
-    <button class="qa" onclick="openSettings()"><span class="qa-icon">⚙️</span><span>Options</span></button>
+  <div class="quick-actions quick-actions-premium">
+    <button class="qa qa-wide" onclick="goTab('train')"><span class="qa-icon">⚡</span><span>Start</span></button>
+    <button class="qa qa-wide" onclick="addProtein(30)"><span class="qa-icon">🥩</span><span>+30g</span></button>
+    <button class="qa qa-wide" onclick="addWater(500)"><span class="qa-icon">💧</span><span>+500ml</span></button>
+    <button class="qa qa-wide" onclick="openQuickLog('run')"><span class="qa-icon">🏃</span><span>Run</span></button>
+    <button class="qa qa-wide" onclick="openQuickLog('weight')"><span class="qa-icon">⚖️</span><span>Peser</span></button>
+    <button class="qa qa-wide" onclick="openSettings()"><span class="qa-icon">⚙️</span><span>Setup</span></button>
   </div>
 
 </section>
@@ -204,9 +229,6 @@
   <h3 class="section-title">Objectifs</h3>
   <div id="goalsList"></div>
   <button class="btn-outline full" onclick="openGoalModal()">+ Nouvel objectif</button>
-
-  <h3 class="section-title">Focus</h3>
-  <div id="focusGoal"></div>
 
   <h3 class="section-title">Achievements <span class="muted" id="achCount">0/0</span></h3>
   <div class="ach-grid" id="achGrid"></div>
@@ -332,19 +354,21 @@
       <div class="toggle" id="hardcoreToggle" onclick="toggleHardcore()"></div>
     </div>
 
-    <h3 class="section-title">Objectifs nutrition</h3>
+    <h3 class="section-title">Nutrition targets</h3>
     <div class="input-row">
       <div class="input-wrap">
-        <label>Protéines</label>
+        <label>Cible protéines</label>
         <input type="number" id="proteinTarget" step="10"><span class="unit">g</span>
       </div>
       <div class="input-wrap">
-        <label>Hydratation</label>
-        <input type="number" id="waterTarget" step="100"><span class="unit">ml</span>
+        <label>Cible eau</label>
+        <input type="number" id="waterTarget" step="250"><span class="unit">ml</span>
       </div>
     </div>
-    <button class="btn-outline full" onclick="autofillWaterTarget()">Auto eau selon poids</button>
-    <button class="btn-outline full" onclick="saveTargets()">Sauvegarder</button>
+    <div class="input-row">
+      <button class="btn-outline" onclick="saveProteinTarget()">Sauvegarder</button>
+      <button class="btn-outline" onclick="saveWaterTarget()">Eau auto</button>
+    </div>
 
     <h3 class="section-title">Données</h3>
     <button class="btn-outline full" onclick="exportData()">📦 Exporter mes données</button>
