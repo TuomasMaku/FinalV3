@@ -369,6 +369,15 @@ function renderToday() {
   renderWater();
 }
 
+function handleDailyCardClick(event) {
+  const body = $('dailyCardBody');
+  const isInsideBody = body && body.contains(event.target);
+  const isAction = event.target.closest('button, .di-btn, .daily-item');
+  if (isInsideBody && isAction) return;
+  if (isInsideBody) return;
+  toggleDailyCard();
+}
+
 function toggleDailyCard(force) {
   dailyUiOpen = typeof force === 'boolean' ? force : !dailyUiOpen;
   S.set('dailyUiOpen', dailyUiOpen);
@@ -378,7 +387,7 @@ function toggleDailyCard(force) {
   const sub = $('dailyCardSub');
   if (card) card.classList.toggle('open', dailyUiOpen);
   if (body) body.style.display = dailyUiOpen ? 'block' : 'none';
-  if (btn) btn.textContent = dailyUiOpen ? '▴' : '▾';
+  if (btn) { btn.textContent = dailyUiOpen ? '▴' : '▾'; btn.onclick = (e) => { e.stopPropagation(); toggleDailyCard(); }; }
   if (sub) sub.textContent = dailyUiOpen ? 'Clique pour refermer' : 'Clique pour ouvrir';
 }
 
@@ -1672,11 +1681,11 @@ init();
     setText('protStatus', pct >= 100 ? 'Objectif verrouillé' : pct >= 70 ? 'Bien parti' : 'Il faut nourrir la machine');
     const bar = $('protBar'); if (bar) bar.style.width = pct + '%';
     el.innerHTML = `
-      <button class="macro-btn" onclick="addProtein(10)">+10g</button>
-      <button class="macro-btn" onclick="addProtein(20)">+20g</button>
-      <button class="macro-btn" onclick="addProtein(30)">+30g</button>
-      <button class="macro-btn" onclick="addProtein(50)">+50g</button>
-      <button class="macro-btn ghost" onclick="resetProtein()">Reset</button>`;
+      <button class="macro-btn compact" onclick="addProtein(10)">+10g</button>
+      <button class="macro-btn compact" onclick="addProtein(20)">+20g</button>
+      <button class="macro-btn compact" onclick="addProtein(30)">+30g</button>
+      <button class="macro-btn compact" onclick="addProtein(50)">+50g</button>
+      <button class="macro-btn compact ghost" onclick="resetProtein()">Reset</button>`;
   }
 
   renderWater = function() {
@@ -1689,11 +1698,11 @@ init();
     setText('waterStatus', pct >= 100 ? 'Hydratation validée' : pct >= 70 ? 'Encore un peu' : 'Monte le volume d’eau');
     const bar = $('waterBar'); if (bar) bar.style.width = pct + '%';
     el.innerHTML = `
-      <button class="macro-btn water" onclick="addWater(250)">+250</button>
-      <button class="macro-btn water" onclick="addWater(500)">+500</button>
-      <button class="macro-btn water" onclick="addWater(750)">+750</button>
-      <button class="macro-btn water" onclick="addWater(1000)">+1L</button>
-      <button class="macro-btn ghost" onclick="resetWater()">Reset</button>`;
+      <button class="macro-btn compact water" onclick="addWater(250)">+250ml</button>
+      <button class="macro-btn compact water" onclick="addWater(500)">+500ml</button>
+      <button class="macro-btn compact water" onclick="addWater(750)">+750ml</button>
+      <button class="macro-btn compact water" onclick="addWater(1000)">+1L</button>
+      <button class="macro-btn compact ghost" onclick="resetWater()">Reset</button>`;
   }
 
   renderToday = function() {
