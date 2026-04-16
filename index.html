@@ -59,24 +59,40 @@
   <div class="card">
     <div class="card-header">
       <span class="card-title">🔥 Daily Grind</span>
-      <span class="card-value" id="dailyPct">0%</span>
+      <div class="card-actions-inline">
+        <span class="card-value" id="dailyPct">0%</span>
+        <button class="mini-action" onclick="resetDaily()">reset</button>
+      </div>
     </div>
     <div class="daily-grid" id="dailyGrid"></div>
+  </div>
+
+  <div class="card score-card">
+    <div class="card-header">
+      <span class="card-title">🎯 Score du jour</span>
+      <span class="card-value" id="scorePct">0%</span>
+    </div>
+    <div class="macro-progress"><div class="macro-progress-fill" id="scoreBar"></div></div>
+    <div class="macro-hint" id="scoreLabel">à lancer</div>
   </div>
 
   <!-- Nutrition -->
   <div class="card">
     <div class="card-header">
       <span class="card-title">🥩 Protéines</span>
-      <span class="card-value"><span id="protG">0</span><span class="muted">/150g</span></span>
+      <span class="card-value"><span id="protG">0</span><span class="muted">/<span id="protTargetDisplay">150g</span></span></span>
     </div>
-    <div class="prot-row" id="protBlocks"></div>
+    <div class="macro-progress"><div class="macro-progress-fill" id="protBar"></div></div>
+    <div class="macro-hint" id="protHint">0g restant</div>
+    <div class="macro-quick" id="protQuick"></div>
 
     <div class="card-header" style="margin-top:20px">
       <span class="card-title">💧 Hydratation</span>
-      <span class="card-value"><span id="waterCount">0</span><span class="muted">/8</span></span>
+      <span class="card-value"><span id="waterCount">0</span><span class="muted">/<span id="waterTargetDisplay">2.5L</span></span></span>
     </div>
-    <div class="water-row" id="waterBlocks"></div>
+    <div class="macro-progress water"><div class="macro-progress-fill water" id="waterBar"></div></div>
+    <div class="macro-hint" id="waterHint">0ml restant</div>
+    <div class="macro-quick" id="waterQuick"></div>
   </div>
 
   <!-- Quick actions -->
@@ -188,6 +204,9 @@
   <h3 class="section-title">Objectifs</h3>
   <div id="goalsList"></div>
   <button class="btn-outline full" onclick="openGoalModal()">+ Nouvel objectif</button>
+
+  <h3 class="section-title">Focus</h3>
+  <div id="focusGoal"></div>
 
   <h3 class="section-title">Achievements <span class="muted" id="achCount">0/0</span></h3>
   <div class="ach-grid" id="achGrid"></div>
@@ -313,14 +332,19 @@
       <div class="toggle" id="hardcoreToggle" onclick="toggleHardcore()"></div>
     </div>
 
-    <h3 class="section-title">Objectifs protéines</h3>
+    <h3 class="section-title">Objectifs nutrition</h3>
     <div class="input-row">
       <div class="input-wrap">
-        <label>Cible journalière</label>
+        <label>Protéines</label>
         <input type="number" id="proteinTarget" step="10"><span class="unit">g</span>
       </div>
+      <div class="input-wrap">
+        <label>Hydratation</label>
+        <input type="number" id="waterTarget" step="100"><span class="unit">ml</span>
+      </div>
     </div>
-    <button class="btn-outline full" onclick="saveProteinTarget()">Sauvegarder</button>
+    <button class="btn-outline full" onclick="autofillWaterTarget()">Auto eau selon poids</button>
+    <button class="btn-outline full" onclick="saveTargets()">Sauvegarder</button>
 
     <h3 class="section-title">Données</h3>
     <button class="btn-outline full" onclick="exportData()">📦 Exporter mes données</button>

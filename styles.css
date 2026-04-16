@@ -1429,3 +1429,98 @@ h1, h2, h3 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; letter-spa
 /* ───── UTILITIES ───── */
 .spacer-sm { height: 8px; }
 .spacer { height: 20px; }
+
+
+/* ───── CARD INLINE ACTIONS ───── */
+.card-actions-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mini-action {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 2px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.mini-action:active { opacity: 0.7; }
+
+/* ───── MACRO TRACKERS ───── */
+.score-card { margin-top: 2px; }
+.macro-progress {
+  height: 6px;
+  background: var(--border);
+  margin-bottom: 10px;
+}
+.macro-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+.macro-progress.water .macro-progress-fill,
+.macro-progress-fill.water { background: var(--pull); }
+.macro-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.macro-quick {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.macro-chip {
+  border: 1px solid rgba(201,255,0,0.2);
+  background: rgba(201,255,0,0.08);
+  color: var(--accent);
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 2px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.macro-chip.water {
+  color: var(--pull);
+  border-color: rgba(0,184,255,0.2);
+  background: rgba(0,184,255,0.08);
+}
+.macro-chip.ghost {
+  color: var(--muted);
+  border-color: var(--border);
+  background: transparent;
+}
+.macro-chip:active { opacity: 0.75; }
+
+/* ───── GOALS EXTRA ───── */
+.goal-edit {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+}
+.goal-edit:active { opacity: 0.7; }
+#focusGoal {
+  background: var(--surface);
+  padding: 16px;
+  margin-bottom: 2px;
+}
+.focus-card-inner { display: flex; flex-direction: column; gap: 8px; }
+.focus-top {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-family: 'Bebas Neue', sans-serif;
+  letter-spacing: 2px;
+}
+.focus-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  letter-spacing: 1px;
+}
+.focus-meta { color: var(--muted); font-size: 12px; }
+.focus-empty { color: var(--muted); font-size: 12px; }

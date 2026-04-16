@@ -155,6 +155,26 @@ const DAILY = [
   { id: 4, icon: '🎯', name: 'Gainage', target: 180, step: 30, unit: 'sec' },
 ];
 const DAILY_TOTAL = DAILY.reduce((a, c) => a + c.target, 0);
+const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+const dailyGoalReached = () => state.dailyState.reps.every((r, i) => r >= DAILY[i].target);
+const getTodayScore = () => {
+  const dailyPct = Math.round((state.dailyState.reps.reduce((a, v) => a + v, 0) / DAILY_TOTAL) * 100);
+  const trainPct = (() => {
+    const cur = curDayIdx();
+    if (cur < 0) return 0;
+    const day = DAYS[cur];
+    const totalExos = day.sections.reduce((a, s) => a + s.exercises.length, 0);
+    if (!totalExos) return 0;
+    let doneExos = 0;
+    day.sections.forEach((sec, si) => sec.exercises.forEach((ex, ei) => {
+      if (state.progState[`d${cur}s${si}e${ei}`]) doneExos++;
+    }));
+    return Math.round((doneExos / totalExos) * 100);
+  })();
+  const protPct = Math.round((state.protein.grams / state.proteinTarget) * 100);
+  const waterPct = Math.round((state.water.ml / state.waterTarget) * 100);
+  return clamp(Math.round((dailyPct + trainPct + protPct + waterPct) / 4), 0, 100);
+};
 
 /* ───── RANKS ───── */
 const RANKS = [
@@ -210,12 +230,29 @@ const QUOTES = [
     S.set('prData', oldPr);
     console.log('[migration] prChargesData → prData');
   }
-  /* proteinState → protein */
+
+  /* protein blocks → grams */
+  const rawProt = S.get('protein', null);
+  if (rawProt && !('grams' in rawProt)) {
+    const target = S.get('proteinTarget', 150);
+    const blocks = Array.isArray(rawProt.blocks) ? rawProt.blocks.filter(Boolean).length : 0;
+    S.set('protein', { date: rawProt.date || today(), grams: Math.round((target / 4) * blocks) });
+    console.log('[migration] protein blocks → grams');
+  }
   const oldProt = S.get('proteinState', null);
-  const newProt = S.get('protein', null);
-  if (oldProt && !newProt && oldProt.blocks) {
-    S.set('protein', oldProt);
-    console.log('[migration] proteinState → protein');
+  const normalizedProt = S.get('protein', null);
+  if (oldProt && (!normalizedProt || !('grams' in normalizedProt))) {
+    const target = S.get('proteinTarget', 150);
+    const blocks = Array.isArray(oldProt.blocks) ? oldProt.blocks.filter(Boolean).length : 0;
+    S.set('protein', { date: oldProt.date || today(), grams: Math.round((target / 4) * blocks) });
+    console.log('[migration] proteinState → protein grams');
+  }
+
+  /* water count → ml */
+  const rawWater = S.get('water', null);
+  if (rawWater && !('ml' in rawWater)) {
+    S.set('water', { date: rawWater.date || today(), ml: (rawWater.count || 0) * 250 });
+    console.log('[migration] water count → ml');
   }
 })();
 
@@ -235,14 +272,23 @@ let state = {
   bodyLog:      S.get('bodyLog', []),
   goals:        S.get('goals', []),
   achievements: S.get('achievements', {}),
-  protein:      S.get('protein', { date: '', blocks: [false, false, false, false] }),
+  protein:      S.get('protein', { date: '', grams: 0 }),
   proteinStreak:S.get('proteinStreak', { count: 0, lastDate: '' }),
   proteinTarget: S.get('proteinTarget', 150),
-  water:        S.get('water', { date: '', count: 0 }),
+  water:        S.get('water', { date: '', ml: 0 }),
   waterStreak:  S.get('waterStreak', { count: 0, lastDate: '' }),
+  waterTarget:  S.get('waterTarget', 2500),
 };
 
 /* Reset daily state if new day */
+if (!Array.isArray(state.dailyState.reps)) {
+  state.dailyState = { date: today(), reps: DAILY.map(() => 0) };
+}
+if (state.dailyState.reps.length !== DAILY.length) {
+  const padded = Array.from({ length: DAILY.length }, (_, i) => state.dailyState.reps[i] || 0);
+  state.dailyState = { ...state.dailyState, reps: padded };
+  S.set('dailyState', state.dailyState);
+}
 if (state.dailyState.date !== today()) {
   // Archive previous day to history before reset
   if (state.dailyState.date && state.dailyState.reps.some(v => v > 0)) {
@@ -262,11 +308,19 @@ if (state.dailyState.date !== today()) {
   S.set('dailyState', state.dailyState);
 }
 if (state.protein.date !== today()) {
-  state.protein = { date: today(), blocks: [false, false, false, false] };
+  state.protein = { date: today(), grams: 0 };
+  S.set('protein', state.protein);
+}
+if (typeof state.protein.grams !== 'number') {
+  state.protein.grams = 0;
   S.set('protein', state.protein);
 }
 if (state.water.date !== today()) {
-  state.water = { date: today(), count: 0 };
+  state.water = { date: today(), ml: 0 };
+  S.set('water', state.water);
+}
+if (typeof state.water.ml !== 'number') {
+  state.water.ml = 0;
   S.set('water', state.water);
 }
 
@@ -366,6 +420,12 @@ function renderToday() {
   /* Protein & water */
   renderProtein();
   renderWater();
+
+  const score = getTodayScore();
+  setText('scorePct', score + '%');
+  setText('scoreLabel', score >= 90 ? 'élite' : score >= 75 ? 'solide' : score >= 50 ? 'en cours' : 'à lancer');
+  const scoreBar = $('scoreBar');
+  if (scoreBar) scoreBar.style.width = clamp(score, 0, 100) + '%';
 }
 
 function renderDailyGrid() {
@@ -413,7 +473,17 @@ function dailyStep(i, sign) {
 
   if (navigator.vibrate) navigator.vibrate(sign > 0 ? 40 : 20);
   renderDailyGrid();
+  renderToday();
   checkAchievements();
+}
+
+function resetDaily() {
+  state.dailyState = { date: today(), reps: DAILY.map(() => 0) };
+  S.set('dailyState', state.dailyState);
+  state.historyData = state.historyData.filter(d => d.date !== today());
+  S.set('historyData', state.historyData);
+  toast('🧹', 'Daily reset', 'Tu repars clean pour aujourd\'hui');
+  renderToday();
 }
 
 function archiveDaily() {
@@ -439,63 +509,76 @@ const PROT_SLOTS = [
 ];
 
 function renderProtein() {
-  const el = $('protBlocks');
-  if (!el) return;
-  const perSlot = state.proteinTarget / 4;
-  const doneG = state.protein.blocks.filter(Boolean).length * perSlot;
-  setText('protG', Math.round(doneG));
-  el.innerHTML = PROT_SLOTS.map((s, i) => `
-    <div class="prot-slot ${state.protein.blocks[i] ? 'done' : ''}" onclick="toggleProt(${i})">
-      <div class="prot-icon">${s.icon}</div>
-      <div class="prot-label">${s.label}</div>
-      <div class="prot-g">+${Math.round(perSlot)}g</div>
-    </div>`).join('');
+  const quick = $('protQuick');
+  if (!quick) return;
+  const pct = clamp(Math.round((state.protein.grams / state.proteinTarget) * 100), 0, 100);
+  setText('protG', Math.round(state.protein.grams));
+  setText('protTargetDisplay', state.proteinTarget + 'g');
+  setText('protHint', `${Math.max(0, Math.round(state.proteinTarget - state.protein.grams))}g restant`);
+  const bar = $('protBar');
+  if (bar) bar.style.width = pct + '%';
+  quick.innerHTML = [10,20,30,50].map(v => `
+    <button class="macro-chip" onclick="addProtein(${v})">+${v}g</button>`).join('') +
+    `<button class="macro-chip ghost" onclick="resetProtein()">reset</button>`;
 }
 
-function toggleProt(i) {
-  state.protein.blocks[i] = !state.protein.blocks[i];
+function addProtein(g) {
+  state.protein.grams = clamp(Math.round((state.protein.grams + g) * 10) / 10, 0, 500);
   S.set('protein', state.protein);
-  /* Streak */
-  if (state.protein.blocks.every(Boolean)) {
-    if (state.proteinStreak.lastDate !== today()) {
-      state.proteinStreak.count = state.proteinStreak.lastDate === yesterday() ? state.proteinStreak.count + 1 : 1;
-      state.proteinStreak.lastDate = today();
-      S.set('proteinStreak', state.proteinStreak);
-    }
+  if (state.protein.grams >= state.proteinTarget && state.proteinStreak.lastDate !== today()) {
+    state.proteinStreak.count = state.proteinStreak.lastDate === yesterday() ? state.proteinStreak.count + 1 : 1;
+    state.proteinStreak.lastDate = today();
+    S.set('proteinStreak', state.proteinStreak);
+    toast('🥩', 'Objectif prot atteint', `${Math.round(state.protein.grams)}g aujourd'hui`);
   }
-  if (navigator.vibrate) navigator.vibrate(30);
+  if (navigator.vibrate) navigator.vibrate(20);
   renderProtein();
+  renderToday();
   checkAchievements();
+}
+
+function resetProtein() {
+  state.protein.grams = 0;
+  S.set('protein', state.protein);
+  renderProtein();
+  renderToday();
 }
 
 /* ───── WATER ───── */
 function renderWater() {
-  const el = $('waterBlocks');
-  if (!el) return;
-  setText('waterCount', state.water.count);
-  el.innerHTML = Array.from({ length: 8 }, (_, i) => `
-    <div class="water-glass ${i < state.water.count ? 'filled' : ''}" onclick="toggleWater(${i})"></div>`).join('');
+  const quick = $('waterQuick');
+  if (!quick) return;
+  const pct = clamp(Math.round((state.water.ml / state.waterTarget) * 100), 0, 100);
+  setText('waterCount', (state.water.ml / 1000).toFixed(state.water.ml % 1000 === 0 ? 0 : 1));
+  setText('waterTargetDisplay', (state.waterTarget / 1000).toFixed(state.waterTarget % 1000 === 0 ? 0 : 1) + 'L');
+  setText('waterHint', `${Math.max(0, state.waterTarget - state.water.ml)}ml restant`);
+  const bar = $('waterBar');
+  if (bar) bar.style.width = pct + '%';
+  quick.innerHTML = [250,500,750,1000].map(v => `
+    <button class="macro-chip water" onclick="addWater(${v})">+${v >= 1000 ? (v/1000)+'L' : v+'ml'}</button>`).join('') +
+    `<button class="macro-chip ghost" onclick="resetWater()">reset</button>`;
 }
 
-function toggleWater(i) {
-  /* Tap on glass i: if filled => reduce to i, else fill to i+1 */
-  if (i < state.water.count) {
-    state.water.count = i;
-  } else {
-    state.water.count = i + 1;
-  }
+function addWater(ml) {
+  state.water.ml = clamp(state.water.ml + ml, 0, 10000);
   S.set('water', state.water);
-  /* Streak */
-  if (state.water.count >= 8) {
-    if (state.waterStreak.lastDate !== today()) {
-      state.waterStreak.count = state.waterStreak.lastDate === yesterday() ? state.waterStreak.count + 1 : 1;
-      state.waterStreak.lastDate = today();
-      S.set('waterStreak', state.waterStreak);
-    }
+  if (state.water.ml >= state.waterTarget && state.waterStreak.lastDate !== today()) {
+    state.waterStreak.count = state.waterStreak.lastDate === yesterday() ? state.waterStreak.count + 1 : 1;
+    state.waterStreak.lastDate = today();
+    S.set('waterStreak', state.waterStreak);
+    toast('💧', 'Hydratation validée', `${(state.water.ml / 1000).toFixed(1)}L aujourd'hui`);
   }
   if (navigator.vibrate) navigator.vibrate(20);
   renderWater();
+  renderToday();
   checkAchievements();
+}
+
+function resetWater() {
+  state.water.ml = 0;
+  S.set('water', state.water);
+  renderWater();
+  renderToday();
 }
 
 /* ───── TRAIN TAB ───── */
@@ -1068,6 +1151,7 @@ function renderBody() {
 
   /* Goals */
   renderGoals();
+  renderFocusCard();
 
   /* Achievements */
   renderAchGrid();
@@ -1102,6 +1186,27 @@ function renderWeightChart() {
     <text x="${pts[pts.length-1].x}" y="${pts[pts.length-1].y - 8}" text-anchor="middle" fill="${color}" font-size="11" font-family="Bebas Neue">${last.kg}kg</text>`;
 }
 
+function renderFocusCard() {
+  const el = $('focusGoal');
+  if (!el) return;
+  syncGoalsWithData();
+  const active = [...state.goals]
+    .filter(g => g.target > 0 && ((g.type === 'run5k' && g.current > g.target) || (g.type !== 'run5k' && g.current < g.target)))
+    .sort((a, b) => ((a.target - a.current) / a.target) - ((b.target - b.current) / b.target))[0];
+  if (!active) {
+    el.innerHTML = '<div class="focus-empty">Aucun objectif chaud. Crée-en un ou termine ton cycle.</div>';
+    return;
+  }
+  const reverse = active.type === 'run5k';
+  const pct = clamp(Math.round(reverse ? (active.target / Math.max(active.current || active.target, 0.1)) * 100 : (active.current / active.target) * 100), 0, 100);
+  el.innerHTML = `<div class="focus-card-inner">
+    <div class="focus-top"><span>Focus actuel</span><span>${pct}%</span></div>
+    <div class="focus-title">${active.icon} ${active.name}</div>
+    <div class="goal-bar"><div class="goal-bar-fill" style="width:${pct}%"></div></div>
+    <div class="focus-meta">${active.current}${active.unit} / ${active.target}${active.unit}</div>
+  </div>`;
+}
+
 /* GOALS */
 const GOAL_TPL = [
   { type: 'bench', name: 'Bench Press', unit: 'kg', icon: '🏋️' },
@@ -1122,13 +1227,16 @@ function renderGoals() {
     return;
   }
   el.innerHTML = state.goals.map(g => {
-    const pct = Math.min(100, Math.round((g.current / g.target) * 100));
-    const done = g.current >= g.target;
+    const reverse = g.type === 'run5k';
+    const pctRaw = reverse ? ((g.target / Math.max(g.current || g.target, 0.1)) * 100) : ((g.current / g.target) * 100);
+    const pct = clamp(Math.round(pctRaw), 0, 100);
+    const done = reverse ? (g.current <= g.target && g.current > 0) : g.current >= g.target;
     const daysLeft = g.deadline ? daysBetween(today(), g.deadline) : null;
     const deadlineStr = daysLeft !== null
       ? (daysLeft > 0 ? `${daysLeft}j restants` : daysLeft === 0 ? 'Aujourd\'hui !' : `Dépassé de ${-daysLeft}j`)
       : '';
     const urgent = daysLeft !== null && daysLeft < 14 && !done;
+    const remain = reverse ? `${Math.max(0, (g.current - g.target)).toFixed(1)}${g.unit} à gratter` : `${(g.target - g.current).toFixed(1)}${g.unit} restant`;
     return `<div class="goal-card ${done ? 'done' : ''}">
       <div class="goal-head">
         <div class="goal-icon">${g.icon}</div>
@@ -1137,12 +1245,13 @@ function renderGoals() {
           ${deadlineStr ? `<div class="goal-deadline ${urgent ? 'urgent' : ''}">${deadlineStr}</div>` : ''}
         </div>
         <div class="goal-vals">${g.current}<span class="muted">/${g.target}${g.unit}</span></div>
+        <button class="goal-edit" onclick="editGoal('${g.id}')">✎</button>
         <button class="goal-del" onclick="deleteGoal('${g.id}')">✕</button>
       </div>
       <div class="goal-bar"><div class="goal-bar-fill" style="width:${pct}%"></div></div>
       <div class="goal-foot">
         <span class="goal-pct">${pct}%</span>
-        <span>${done ? '✓ Atteint 🎉' : `${(g.target - g.current).toFixed(1)}${g.unit} restant`}</span>
+        <span>${done ? '✓ Atteint 🎉' : remain}</span>
       </div>
     </div>`;
   }).join('');
@@ -1155,6 +1264,10 @@ function syncGoalsWithData() {
     if (g.type === 'squat' && state.prData['Squat barre']) v = state.prData['Squat barre'].kg;
     if (g.type === 'weight' && state.bodyLog.length) v = state.bodyLog[0].kg;
     if (g.type === 'streak') v = state.streakData.count;
+    if (g.type === 'run5k') {
+      const best5k = state.runHistory.filter(r => Math.abs(r.dist - 5) <= 0.15).sort((a, b) => a.timeSec - b.timeSec)[0];
+      if (best5k) v = +(best5k.timeSec / 60).toFixed(1);
+    }
     if (v !== null) g.current = v;
   });
   S.set('goals', state.goals);
@@ -1211,12 +1324,27 @@ function saveGoal() {
   closeModal('goalModal');
   toast('🎯', 'Objectif créé', name);
   renderGoals();
+  renderFocusCard();
+}
+
+function editGoal(id) {
+  const g = state.goals.find(x => x.id === id);
+  if (!g) return;
+  const val = prompt(`Mettre à jour ${g.name} (${g.unit || 'valeur'})`, g.current);
+  if (val === null) return;
+  const parsed = parseFloat(val);
+  if (Number.isNaN(parsed)) return;
+  g.current = parsed;
+  S.set('goals', state.goals);
+  renderGoals();
+  renderFocusCard();
 }
 
 function deleteGoal(id) {
   state.goals = state.goals.filter(g => g.id !== id);
   S.set('goals', state.goals);
   renderGoals();
+  renderFocusCard();
 }
 
 /* ACHIEVEMENTS */
@@ -1412,6 +1540,7 @@ function confirmAction(title, msg, onConfirm) {
 function openSettings() {
   $('hardcoreToggle').classList.toggle('on', state.hardcoreMode);
   $('proteinTarget').value = state.proteinTarget;
+  $('waterTarget').value = state.waterTarget;
   showModal('settingsModal');
 }
 
@@ -1423,13 +1552,30 @@ function toggleHardcore() {
     state.hardcoreMode ? 'Zéro pitié sur les skips.' : 'Mode flexible activé.');
 }
 
-function saveProteinTarget() {
-  const v = parseFloat($('proteinTarget').value);
-  if (!v || v < 50 || v > 400) { toast('⚠️', 'Valeur invalide', 'Entre 50 et 400g'); return; }
-  state.proteinTarget = v;
-  S.set('proteinTarget', v);
-  toast('🥩', 'Objectif enregistré', v + 'g/jour');
+function saveTargets() {
+  const prot = parseFloat($('proteinTarget').value);
+  const water = parseFloat($('waterTarget').value);
+  if (!prot || prot < 50 || prot > 400) { toast('⚠️', 'Prot invalide', 'Entre 50 et 400g'); return; }
+  if (!water || water < 1000 || water > 8000) { toast('⚠️', 'Hydratation invalide', 'Entre 1000 et 8000ml'); return; }
+  state.proteinTarget = prot;
+  state.waterTarget = water;
+  S.set('proteinTarget', prot);
+  S.set('waterTarget', water);
+  toast('⚙️', 'Objectifs mis à jour', `${prot}g · ${(water/1000).toFixed(1)}L`);
   renderProtein();
+  renderWater();
+  renderToday();
+}
+
+function autofillWaterTarget() {
+  const kg = state.bodyLog[0]?.kg;
+  if (!kg) {
+    toast('⚠️', 'Pas de poids récent', 'Log une pesée pour auto-calculer');
+    return;
+  }
+  const target = Math.round((kg * 35) / 50) * 50;
+  $('waterTarget').value = target;
+  toast('💧', 'Hydratation suggérée', `${target}ml basé sur ${kg}kg`);
 }
 
 /* ───── BACKUP / RESTORE ───── */
